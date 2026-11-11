@@ -1,0 +1,553 @@
+---
+title: "hw_5"
+format: html
+editor: visual
+---
+The website is https://github.com/meiluso987-git/Homework_5
+
+# Problem 1
+
+## a. For the waldCI class, define some followings
+
+```{r}
+setClass("waldCI",
+          slots = c(level = "numeric",
+                    mean = "numeric",
+                    sterr = "numeric"))
+setValidity("waldCI", function(object) {
+ if (object@level <= 0 | object@level >= 1) {
+ stop("level must be in (0, 1)")
+ }
+ if (object@sterr <= 0) {
+ stop("stderr must be positive")
+ }
+ if (!is.finite(object@sterr)) {
+ stop("Infinite CI not supported")
+ }
+ return(TRUE)
+})
+```
+
+```{r}
+#' Title Create `waldCI` object.
+#' @param level 
+#' @param lb 
+#' @param ub 
+#' @param mean 
+#' @param sterr 
+#' @returns A `waldCI` object
+#' @export
+makeCI <- function(level,
+                   lb = NULL,
+                   ub = NULL,
+                   mean = NULL,
+                   sterr = NULL) {
+ if (!is.null(mean) && !is.null(stderr) &&
+      is.null(lb) && is.null(ub)) {
+   return(new("waldCI", level = level, mean = mean, sterr = sterr))
+ } else if (is.null(mean) && is.null(sterr) &&
+            !is.null(lb) && !is.null(ub)) {
+ if (lb > ub) {
+   stop("lb must be less than ub")
+ }
+ z <- qnorm((1 + level) / 2)
+ mean <- (lb + ub) / 2
+ sterr <- (ub - lb) / (2 * z)
+ return(new("waldCI", level = level, mean = mean, sterr = sterr))
+ } else {
+   stop("Input must be either lb/ub or mean/sterr")
+ }
+}
+```
+
+method:
+
+```{r}
+#' Title Internal function to compute bounds
+#' @param ci 
+#' @returns A
+#' @export
+.getBounds <- function(ci) {
+  z <- qnorm((1 + ci@level)/2)
+  lb <- ci@mean - z*ci@sterr
+  ub <- ci@mean + z*ci@sterr
+  return(c(lb, ub))
+}
+
+#' Title Show method for waldCI object
+#' @param waldCI 
+#' @returns `object`, invisibly
+#' @export
+setMethod("show", "waldCI", function(object) {
+ bound <- .getBounds(object)
+ cat(round(object@level*100))
+ cat("% CI: (")
+ cat(bound[1])
+ cat(", ")
+ cat(bound[2])
+ cat(")\n")
+ return(invisible(object))
+})
+```
+
+Accessors:
+
+```{r}
+#' Title Internal function to get a named slot
+#' @param object 
+#' @param slotname 
+#' @returns A
+#' @export
+.getSlot <- function(object, slotname) {
+ if (slotname %in% c("level", "mean", "sterr")) {
+    return(slot(object, slotname))
+ }
+ bounds <- .getBounds(object)
+ if (slotname == "lb") {
+   return(bounds[1])
+ } else if (slotname == "ub") {
+   return(bounds[2])
+ } else {
+   stop("Invalid slotname")
+ }
+}
+
+#' Title Getters and Setters for Wald CI objects
+#' @param object A `waldCI` object
+#' @returns Getters return scalar; setters return the object
+#' @export
+setGeneric("level", function(object) {standardGeneric("level")})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("level", "waldCI", function(object) .getSlot(object, "level"))
+
+mean.waldCI <- function(x, ...) .getSlot(x, "mean")
+
+##' @param object 
+##' @rdname ci_setters_getters
+##' @export
+setGeneric("sterr", function(object) {standardGeneric("sterr")})
+```
+
+```{r}
+#' @param waldCI 
+#' @returns
+#' @export
+setMethod("sterr", "waldCI", function(object) .getSlot(object,"level"))
+
+#' @param object 
+#' @returns
+#' @export
+setGeneric("lb", function(object) {standardGeneric("lb")})
+```
+
+```{r}
+setMethod("lb", "waldCI", function(object) .getSlot(object, "lb"))
+setGeneric("ub", function(object) {standardGeneric("ub")})
+```
+
+```{r}
+setMethod("ub", "waldCI", function(object) .getSlot(object, "ub"))
+```
+
+Setters:
+
+```{r}
+setGeneric("level<-", function(object, value) {
+ standardGeneric("level<-")
+})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("level<-", "waldCI", function(object, value) {
+ return(makeCI(level = value,
+               mean = object@mean,
+               sterr = object@sterr))
+})
+
+##' @param object 
+##' @param value 
+##' @rdname ci_setters_getters
+##' @export
+setGeneric("mean<-", function(object, value) {
+ standardGeneric("mean<-")
+})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("mean<-", "waldCI", function(object, value) {
+ return(makeCI(level = object@level,
+               mean = value,
+               sterr = object@sterr))
+})
+
+##' @param object 
+##' @param value 
+##' @rdname ci_setters_getters
+##' @export
+setGeneric("sterr<-", function(object, value) {
+ standardGeneric("sterr<-")
+})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("sterr<-", "waldCI", function(object, value) {
+ return(makeCI(level = object@level,
+               mean = object@mean,
+               sterr = value))
+})
+
+##' @param object
+##' @param value 
+##' @rdname ci_setters_getters
+##' @export
+setGeneric("lb<-", function(object, value) {
+ standardGeneric("lb<-")
+})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("lb<-", "waldCI", function(object, value) {
+ return(makeCI(level = object@level,
+               lb = value,
+               ub = .getBounds(object)[2]))
+})
+
+##' @param object 
+##' @param value 
+##' @rdname ci_setters_getters
+##' @export
+setGeneric("ub<-", function(object, value) {
+ standardGeneric("ub<-")
+})
+```
+
+```{r}
+##' @param waldCI 
+##' @rdname ci_setters_getters
+##' @export
+setMethod("ub<-", "waldCI", function(object, value) {
+ return(makeCI(level = object@level,
+ lb = .getBounds(object)[2],
+ ub = value))
+})
+```
+
+contains and overlaps:
+
+```{r}
+##' Check whether a CI overlaps with a constant or another CI
+##' (`overlap`)
+##' @param ci A `waldCI` object
+##' @param value A numeric value
+##' @return Logical.
+##' @rdname contains_overlaps
+##' @export
+contains <- function(ci, value) {
+ stopifnot(is.numeric(value))
+ stopifnot(length(value) == 1)
+ bounds <- .getBounds(ci)
+ return(value > bounds[1] & value < bounds[2])
+}
+
+##' @param ci1 
+##' @param ci2 
+##' @rdname contains_overlaps
+##' @export
+overlap <- function(ci1, ci2) {
+ b1 <- .getBounds(ci1)
+ b2 <- .getBounds(ci2)
+ return(max(b1[1], b2[1]) <= min(b1[2], b2[2]))
+}
+```
+
+as.numeric:
+
+```{r}
+##' Convert waldCI to numeric
+##' @return Length 2 vector of the bounds of `x`.
+##' @export
+setGeneric("as.numeric")
+setMethod("as.numeric", "waldCI", function(x) {
+ return(.getBounds(x))
+})
+```
+
+Transform:
+
+```{r}
+##' Apply a monotonic transformation to a `waldCI`
+##' @param ci A `waldCI` object
+##' @param fn Any function that takes in a scalar and returns a scalar.
+##' @return The transformed waldCI
+##' @export
+transformCI <- function(ci, fn) {
+ stopifnot(is.function(fn))
+ stopifnot(is(ci, "waldCI"))
+ return(makeCI(level = ci@level,
+ mean = fn(ci@mean),
+ sterr = fn(ci@sterr)))
+}
+```
+
+## b. Use your waldCI class to create three objects:
+
+```{r}
+ci1 <- makeCI(.95, 17.2, 24.7)
+ci2 <- makeCI(.99, mean = 13, sterr = 2.5)
+ci3 <- makeCI(.75, 27.43, 39.22)
+```
+
+```{r}
+ci1
+ci2
+ci3
+as.numeric(ci1)
+as.numeric(ci2)
+as.numeric(ci3)
+lb(ci2)
+ub(ci2)
+mean(ci1)
+sterr(ci3)
+level(ci2)
+lb(ci2) <- 10.5
+mean(ci3) <- 34
+level(ci3) <- .8
+contains(ci1, 17)
+contains(ci3, 44)
+overlap(ci1, ci2)
+eci1 <- transformCI(ci1, sqrt)
+eci1
+mean(transformCI(ci2, log))
+```
+
+## c. Show that your validator does not allow the creation of invalid confidence intervals:
+
+```{r}
+makeCI(.9, 3, -2)
+```
+
+```{r}
+makeCI(.9, lb = 5, ub = 2)
+```
+
+```{r}
+makeCI(.9, lb = 2, ub = Inf)
+```
+
+```{r}
+mean(ci1) <- "a"
+```
+
+```{r}
+lb(ci1) <- 20
+sterr(ci1) <- -2
+```
+
+```{r}
+sterr(ci1) <- Inf
+```
+
+# Problem 2
+
+```{r}
+library(tidyverse)
+library(nzelect)
+library(data.table)
+tennis <- read_csv(
+  "https://raw.githubusercontent.com/azhou5849/tennis-atp-sackmann-data/master/atp_matches_2019.csv"
+)
+setDT(tennis)
+```
+
+## a. How many tournaments took place in 2019?
+
+```{r}
+tennis[, .(1), tourney_name][, .(.N)]
+
+tennis[, tourney_name2 := fifelse(grepl("^Davis", tourney_name), "Davis", tourney_name)] |>
+  _[, .(1), tourney_name2] |>
+  _[, .(.N)]
+```
+
+## b. Did any player win more than one tournament? If so, how many players won more than one tournament, and how many tournaments did the most winning player(s) win?
+
+```{r}
+tennis[order(tourney_name, -match_num), .(winner_name, match_num, tourney_name)] |>
+  _[, .SD[1], by = tourney_name] |>
+  _[, .(winner_name, .N), winner_name] |>
+  _[order(-N),] |>
+  _[1:3]
+```
+
+```{r}
+tennis[round == "F", .(N = .N), winner_name] |>
+  _[order(-N),] |>
+  _[1:3]
+```
+
+## c. Is there any evidence that winners have more aces than losers?
+
+```{r}
+stats <- tennis[, .(winmore = w_ace > l_ace)] |>
+  _[!is.na(winmore),.(x = sum(winmore), n = .N), ,]
+prop.test(stats$x, stats$n, .5)
+```
+
+## d. Identify the player(s) with the highest win-rate. Restrict to players with at least 5 matches.
+
+```{r}
+tennis[, .(player = c(winner_name, loser_name), winloss = c(rep(1, .N), rep(0, .N)))] |>
+  _[, .(winrate = mean(winloss), games = .N), player] |>
+  _[games >= 5, .(player, winrate)] |>
+  _[order(-winrate)] |>
+  _[1:3]
+```
+
+# Problem 3
+
+```{r}
+library(plotly)
+covid <- read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/refs/heads/master/rolling-averages/us-states.csv")
+covid$date <- lubridate::ymd(covid$date)
+names(covid)[names(covid) == "date"] <- "Date"
+names(covid)[names(covid) == "state"] <- "State"
+```
+
+## a. How many major and minor spikes in cases were there?
+
+```{r}
+plot_ly(covid, x = ~ Date, y = ~ cases_avg, type = "scatter",
+        mode = "lines") %>%
+ layout(yaxis = list(title = "Daily Cases"))
+```
+
+## b. For the states with the highest and lowest overall rates per population, what differences do you see in their trajectories over time?
+
+```{r}
+library(dplyr)
+library(viridis)
+```
+
+```{r}
+state_case_rate <- covid %>%
+  group_by(State) %>%
+  summarise(cumulative_rate = sum(cases_avg_per_100k), .groups = "drop") %>%
+  arrange(desc(cumulative_rate))
+
+state_highest_rate <- state_case_rate$State[1]
+state_lowest_rate  <- state_case_rate$State[nrow(state_case_rate)]
+
+covid_merged <- covid %>%
+  inner_join(state_case_rate, by = "State") %>%
+  mutate(State = factor(State, levels = state_case_rate$State))
+
+all_states <- levels(covid_merged$State)
+
+state_colors <- rep("lightgrey", length(all_states))
+
+state_colors[all_states == state_lowest_rate] <- "red"
+state_colors[all_states == state_highest_rate] <- "blue"
+
+rate_plot <- plot_ly(covid_merged, 
+                     x = ~ Date, 
+                     y = ~ cases_avg_per_100k,
+                     color = ~ State,
+                     colors = state_colors,
+                     type = "scatter",
+                     mode = "lines") %>%
+  layout(yaxis = list(title = "7-day Average COVID Cases per 100k Residents"))
+
+all_state_labels <- levels(covid_merged$State)
+traces_to_hide <- which(!(all_state_labels %in% c(state_highest_rate, state_lowest_rate)))
+
+rate_plot <- style(rate_plot, visible = "legendonly", traces = traces_to_hide)
+rate_plot
+
+```
+
+## c. Identify, to the best of your ability without a formal test, the first five states to experience Covid in a substantial way.
+
+```{r}
+library(lubridate)
+```
+
+```{r}
+selected_states <- c(
+  "New York", "New Jersey", "Louisiana",
+  "Guam", "Massachusetts", "Rhode Island"
+)
+
+highlight_data <- covid %>%
+  filter(State %in% selected_states) %>%
+  mutate(State = factor(State, levels = selected_states))
+
+other_data <- covid %>%
+  filter(!State %in% selected_states)
+
+# Colors for the selected states
+state_palette <- c(
+  "red", "blue", "green",
+  "purple", "orange", "yellow"
+)
+
+rate_plot <- plot_ly() %>%
+
+  add_lines(
+    data = other_data,
+    x = ~Date,
+    y = ~cases_avg_per_100k,
+    split = ~State,
+    line = list(color = "lightgrey", width = 0.7),
+    showlegend = FALSE,
+    hoverinfo = "skip"
+  ) %>%
+
+  add_lines(
+    data = highlight_data,
+    x = ~Date,
+    y = ~cases_avg_per_100k,
+    color = ~State,
+    colors = state_palette,
+    line = list(width = 2.5),
+    text = ~paste0(
+      State,
+      "<br>Date: ", Date,
+      "<br>Cases per 100k: ",
+      round(cases_avg_per_100k, 1)
+    ),
+    hoverinfo = "text"
+  ) %>%
+
+  layout(
+    title = "Early COVID-19 Trends in Selected States",
+    xaxis = list(
+      title = "Date",
+      range = c("2020-03-01", "2020-05-31")
+    ),
+    yaxis = list(
+      title = "Daily Cases per 100,000",
+      range = c(0, 55)
+    )
+  )
+
+rate_plot
+```
+
+
