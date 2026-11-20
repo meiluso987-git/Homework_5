@@ -3,9 +3,10 @@ title: "hw_5"
 format: html
 editor: visual
 ---
+
 The website is https://github.com/meiluso987-git/Homework_5
 
-# Problem 1
+# Problem 1: OOP Programming
 
 ## a. For the waldCI class, define some followings
 
@@ -60,7 +61,7 @@ makeCI <- function(level,
 }
 ```
 
-method:
+Method:
 
 ```{r}
 #' Title Internal function to compute bounds
@@ -340,15 +341,15 @@ mean(transformCI(ci2, log))
 ## c. Show that your validator does not allow the creation of invalid confidence intervals:
 
 ```{r}
-makeCI(.9, 3, -2)
+makeCI(.9, 4, -2)
 ```
 
 ```{r}
-makeCI(.9, lb = 5, ub = 2)
+makeCI(.9, lb = 7, ub = 2)
 ```
 
 ```{r}
-makeCI(.9, lb = 2, ub = Inf)
+makeCI(.9, lb = 3, ub = Inf)
 ```
 
 ```{r}
@@ -357,14 +358,14 @@ mean(ci1) <- "a"
 
 ```{r}
 lb(ci1) <- 20
-sterr(ci1) <- -2
+sterr(ci1) <- -1
 ```
 
 ```{r}
 sterr(ci1) <- Inf
 ```
 
-# Problem 2
+# Problem 2: data-table
 
 ```{r}
 library(tidyverse)
@@ -385,6 +386,7 @@ tennis[, tourney_name2 := fifelse(grepl("^Davis", tourney_name), "Davis", tourne
   _[, .(1), tourney_name2] |>
   _[, .(.N)]
 ```
+So there are only 69 unique tournaments.
 
 ## b. Did any player win more than one tournament? If so, how many players won more than one tournament, and how many tournaments did the most winning player(s) win?
 
@@ -395,6 +397,7 @@ tennis[order(tourney_name, -match_num), .(winner_name, match_num, tourney_name)]
   _[order(-N),] |>
   _[1:3]
 ```
+Rafael Nadal won the most games, with 9.
 
 ```{r}
 tennis[round == "F", .(N = .N), winner_name] |>
@@ -409,6 +412,7 @@ stats <- tennis[, .(winmore = w_ace > l_ace)] |>
   _[!is.na(winmore),.(x = sum(winmore), n = .N), ,]
 prop.test(stats$x, stats$n, .5)
 ```
+winners perform more aces than losers.
 
 ## d. Identify the player(s) with the highest win-rate. Restrict to players with at least 5 matches.
 
@@ -419,8 +423,9 @@ tennis[, .(player = c(winner_name, loser_name), winloss = c(rep(1, .N), rep(0, .
   _[order(-winrate)] |>
   _[1:3]
 ```
+So Rafael Nadal has the highest win-rate.
 
-# Problem 3
+# Problem 3: poltly
 
 ```{r}
 library(plotly)
@@ -437,12 +442,12 @@ plot_ly(covid, x = ~ Date, y = ~ cases_avg, type = "scatter",
         mode = "lines") %>%
  layout(yaxis = list(title = "Daily Cases"))
 ```
+It can been seen that there are 4 major spikes and 3-4 minor spikes.
 
 ## b. For the states with the highest and lowest overall rates per population, what differences do you see in their trajectories over time?
 
 ```{r}
 library(dplyr)
-library(viridis)
 ```
 
 ```{r}
@@ -549,5 +554,3 @@ rate_plot <- plot_ly() %>%
 
 rate_plot
 ```
-
-
