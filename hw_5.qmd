@@ -11,299 +11,196 @@ The website is https://github.com/meiluso987-git/Homework_5
 ## a. For the waldCI class, define some followings
 
 ```{r}
+# 1. Define the S4 class and its validity rules
 setClass("waldCI",
-          slots = c(level = "numeric",
-                    mean = "numeric",
-                    sterr = "numeric"))
+         slots = c(level = "numeric",mean = "numeric",
+                   sterr = "numeric"))
+
+.is_scalar_number <- function(x) {
+  is.numeric(x) && length(x) == 1L && is.finite(x)
+}
 setValidity("waldCI", function(object) {
- if (object@level <= 0 | object@level >= 1) {
- stop("level must be in (0, 1)")
- }
- if (object@sterr <= 0) {
- stop("stderr must be positive")
- }
- if (!is.finite(object@sterr)) {
- stop("Infinite CI not supported")
- }
- return(TRUE)
+  if (!.is_scalar_number(object@level) ||
+      object@level <= 0 || object@level >= 1) {
+    return("level must be between 0 and 1")
+  }
+  if (!.is_scalar_number(object@mean)) {
+    return("mean must be a finite number")
+  }
+  if (!.is_scalar_number(object@sterr) ||
+      object@sterr <= 0) {
+    return("sterr must be positive and finite")
+  }
+  TRUE
 })
 ```
 
 ```{r}
-#' Title Create `waldCI` object.
-#' @param level 
-#' @param lb 
-#' @param ub 
-#' @param mean 
-#' @param sterr 
-#' @returns A `waldCI` object
-#' @export
-makeCI <- function(level,
-                   lb = NULL,
-                   ub = NULL,
-                   mean = NULL,
-                   sterr = NULL) {
- if (!is.null(mean) && !is.null(stderr) &&
-      is.null(lb) && is.null(ub)) {
-   return(new("waldCI", level = level, mean = mean, sterr = sterr))
- } else if (is.null(mean) && is.null(sterr) &&
-            !is.null(lb) && !is.null(ub)) {
- if (lb > ub) {
-   stop("lb must be less than ub")
- }
- z <- qnorm((1 + level) / 2)
- mean <- (lb + ub) / 2
- sterr <- (ub - lb) / (2 * z)
- return(new("waldCI", level = level, mean = mean, sterr = sterr))
- } else {
-   stop("Input must be either lb/ub or mean/sterr")
- }
+# 2. Validator
+.critical_z <- function(level) {
+  qnorm((1 - level) / 2, lower.tail = FALSE)
+}
+
+makeCI <- function(level, mean = NULL, sterr = NULL,
+                   lb = NULL, ub = NULL) {
+  if (!.is_scalar_number(level) ||
+      level <= 0 || level >= 1) {stop("Invalid confidence level")
+  }
+
+  by_estimate <- !is.null(mean) && !is.null(sterr) &&
+    is.null(lb) && is.null(ub)
+
+  by_limits <- !is.null(lb) && !is.null(ub) &&
+    is.null(mean) && is.null(sterr)
+
+  if (!by_estimate && !by_limits) {
+    stop("Provide mean/sterr or lb/ub, but not both")
+  }
+
+  if (by_limits) {
+    if (!.is_scalar_number(lb) ||
+        !.is_scalar_number(ub) || lb >= ub) {
+      stop("Invalid confidence interval bounds")
+    }
+    mean <- lb + (ub - lb) / 2
+    sterr <- (ub - lb) / (2 * .critical_z(level))
+  }
+  result <- new("waldCI", level = level,
+                mean = mean, sterr = sterr)
+  validObject(result)
+  result
 }
 ```
 
-Method:
-
 ```{r}
-#' Title Internal function to compute bounds
-#' @param ci 
-#' @returns A
-#' @export
-.getBounds <- function(ci) {
-  z <- qnorm((1 + ci@level)/2)
-  lb <- ci@mean - z*ci@sterr
-  ub <- ci@mean + z*ci@sterr
-  return(c(lb, ub))
+# 3. A show method
+.ci_bounds <- function(object) {
+  margin <- .critical_z(object@level) * object@sterr
+  c(lb = object@mean - margin,ub = object@mean + margin)
 }
 
-#' Title Show method for waldCI object
-#' @param waldCI 
-#' @returns `object`, invisibly
-#' @export
 setMethod("show", "waldCI", function(object) {
- bound <- .getBounds(object)
- cat(round(object@level*100))
- cat("% CI: (")
- cat(bound[1])
- cat(", ")
- cat(bound[2])
- cat(")\n")
- return(invisible(object))
-})
-```
+  b <- .ci_bounds(object)
+  cat(sprintf("%.1f%% Wald CI: [%.5f, %.5f]\n",
+              100 * object@level, b[1], b[2]))
 
-Accessors:
-
-```{r}
-#' Title Internal function to get a named slot
-#' @param object 
-#' @param slotname 
-#' @returns A
-#' @export
-.getSlot <- function(object, slotname) {
- if (slotname %in% c("level", "mean", "sterr")) {
-    return(slot(object, slotname))
- }
- bounds <- .getBounds(object)
- if (slotname == "lb") {
-   return(bounds[1])
- } else if (slotname == "ub") {
-   return(bounds[2])
- } else {
-   stop("Invalid slotname")
- }
-}
-
-#' Title Getters and Setters for Wald CI objects
-#' @param object A `waldCI` object
-#' @returns Getters return scalar; setters return the object
-#' @export
-setGeneric("level", function(object) {standardGeneric("level")})
-```
-
-```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("level", "waldCI", function(object) .getSlot(object, "level"))
-
-mean.waldCI <- function(x, ...) .getSlot(x, "mean")
-
-##' @param object 
-##' @rdname ci_setters_getters
-##' @export
-setGeneric("sterr", function(object) {standardGeneric("sterr")})
-```
-
-```{r}
-#' @param waldCI 
-#' @returns
-#' @export
-setMethod("sterr", "waldCI", function(object) .getSlot(object,"level"))
-
-#' @param object 
-#' @returns
-#' @export
-setGeneric("lb", function(object) {standardGeneric("lb")})
-```
-
-```{r}
-setMethod("lb", "waldCI", function(object) .getSlot(object, "lb"))
-setGeneric("ub", function(object) {standardGeneric("ub")})
-```
-
-```{r}
-setMethod("ub", "waldCI", function(object) .getSlot(object, "ub"))
-```
-
-Setters:
-
-```{r}
-setGeneric("level<-", function(object, value) {
- standardGeneric("level<-")
+  invisible(object)
 })
 ```
 
 ```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("level<-", "waldCI", function(object, value) {
- return(makeCI(level = value,
-               mean = object@mean,
-               sterr = object@sterr))
+# 4. Accessors
+setGeneric("level",
+           function(object) standardGeneric("level"))
+setMethod("level", "waldCI",
+          function(object) object@level)
+setMethod("mean", "waldCI",
+          function(x, ...) x@mean)
+setGeneric("sterr",
+           function(object) standardGeneric("sterr"))
+setMethod("sterr", "waldCI",
+          function(object) object@sterr)
+setGeneric("lb",
+           function(object) standardGeneric("lb"))
+setMethod("lb", "waldCI",
+          function(object) unname(.ci_bounds(object)[1]))
+setGeneric("ub",
+           function(object) standardGeneric("ub"))
+setMethod("ub", "waldCI",
+          function(object) unname(.ci_bounds(object)[2]))
+```
+
+```{r}
+# 5. Setters
+setGeneric("level<-",
+           function(object, value) standardGeneric("level<-"))
+setReplaceMethod("level", "waldCI", function(object, value) {
+  object@level <- value
+  validObject(object)
+  object
 })
 
-##' @param object 
-##' @param value 
-##' @rdname ci_setters_getters
-##' @export
-setGeneric("mean<-", function(object, value) {
- standardGeneric("mean<-")
+setGeneric("mean<-",
+           function(object, value) standardGeneric("mean<-"))
+setReplaceMethod("mean", "waldCI", function(object, value) {
+  object@mean <- value
+  validObject(object)
+  object
+})
+
+setGeneric("sterr<-",
+           function(object, value) standardGeneric("sterr<-"))
+setReplaceMethod("sterr", "waldCI", function(object, value) {
+  object@sterr <- value
+  validObject(object)
+  object
+})
+
+setGeneric("lb<-",
+           function(object, value) standardGeneric("lb<-"))
+setReplaceMethod("lb", "waldCI", function(object, value) {
+  makeCI(level = object@level,
+         lb = value, ub = ub(object))
+})
+
+setGeneric("ub<-",
+           function(object, value) standardGeneric("ub<-"))
+setReplaceMethod("ub", "waldCI", function(object, value) {
+  makeCI(level = object@level,
+         lb = lb(object), ub = value)
 })
 ```
 
 ```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("mean<-", "waldCI", function(object, value) {
- return(makeCI(level = object@level,
-               mean = value,
-               sterr = object@sterr))
-})
-
-##' @param object 
-##' @param value 
-##' @rdname ci_setters_getters
-##' @export
-setGeneric("sterr<-", function(object, value) {
- standardGeneric("sterr<-")
+# 6. Contains method
+setGeneric("contains",
+           function(object, value) standardGeneric("contains"))
+setMethod("contains", "waldCI", function(object, value) {
+  if (!.is_scalar_number(value)) {
+    stop("value must be one finite number")
+  }
+  value >= lb(object) && value <= ub(object)
 })
 ```
 
 ```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("sterr<-", "waldCI", function(object, value) {
- return(makeCI(level = object@level,
-               mean = object@mean,
-               sterr = value))
-})
-
-##' @param object
-##' @param value 
-##' @rdname ci_setters_getters
-##' @export
-setGeneric("lb<-", function(object, value) {
- standardGeneric("lb<-")
-})
+# 7. Overlap method
+setGeneric("overlap",
+           function(x, y) standardGeneric("overlap"))
+setMethod("overlap",
+          signature(x = "waldCI", y = "waldCI"),
+          function(x, y) {
+            max(lb(x), lb(y)) <= min(ub(x), ub(y))
+          })
 ```
 
 ```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("lb<-", "waldCI", function(object, value) {
- return(makeCI(level = object@level,
-               lb = value,
-               ub = .getBounds(object)[2]))
-})
-
-##' @param object 
-##' @param value 
-##' @rdname ci_setters_getters
-##' @export
-setGeneric("ub<-", function(object, value) {
- standardGeneric("ub<-")
-})
-```
-
-```{r}
-##' @param waldCI 
-##' @rdname ci_setters_getters
-##' @export
-setMethod("ub<-", "waldCI", function(object, value) {
- return(makeCI(level = object@level,
- lb = .getBounds(object)[2],
- ub = value))
-})
-```
-
-contains and overlaps:
-
-```{r}
-##' Check whether a CI overlaps with a constant or another CI
-##' (`overlap`)
-##' @param ci A `waldCI` object
-##' @param value A numeric value
-##' @return Logical.
-##' @rdname contains_overlaps
-##' @export
-contains <- function(ci, value) {
- stopifnot(is.numeric(value))
- stopifnot(length(value) == 1)
- bounds <- .getBounds(ci)
- return(value > bounds[1] & value < bounds[2])
-}
-
-##' @param ci1 
-##' @param ci2 
-##' @rdname contains_overlaps
-##' @export
-overlap <- function(ci1, ci2) {
- b1 <- .getBounds(ci1)
- b2 <- .getBounds(ci2)
- return(max(b1[1], b2[1]) <= min(b1[2], b2[2]))
-}
-```
-
-as.numeric:
-
-```{r}
-##' Convert waldCI to numeric
-##' @return Length 2 vector of the bounds of `x`.
-##' @export
+# 8. Numeric conversion
 setGeneric("as.numeric")
-setMethod("as.numeric", "waldCI", function(x) {
- return(.getBounds(x))
+setMethod("as.numeric", "waldCI", function(x, ...) {
+  unname(.ci_bounds(x))
 })
 ```
 
-Transform:
-
 ```{r}
-##' Apply a monotonic transformation to a `waldCI`
-##' @param ci A `waldCI` object
-##' @param fn Any function that takes in a scalar and returns a scalar.
-##' @return The transformed waldCI
-##' @export
+# 9. Transform confidence interval
 transformCI <- function(ci, fn) {
- stopifnot(is.function(fn))
- stopifnot(is(ci, "waldCI"))
- return(makeCI(level = ci@level,
- mean = fn(ci@mean),
- sterr = fn(ci@sterr)))
+  if (!is(ci, "waldCI")) {
+    stop("ci must be a waldCI object")
+  }
+  if (!is.function(fn)) {
+    stop("fn must be a function")
+  }
+  warning("Only monotonic transformations are valid.",
+          call. = FALSE)
+  new_bounds <- vapply(as.numeric(ci), fn, numeric(1))
+  if (!all(is.finite(new_bounds))) {
+    stop("Transformed bounds must be finite")
+  }
+  new_bounds <- sort(new_bounds)
+  makeCI(level = level(ci),
+         lb = new_bounds[1],
+         ub = new_bounds[2])
 }
 ```
 
@@ -371,186 +268,307 @@ sterr(ci1) <- Inf
 library(tidyverse)
 library(nzelect)
 library(data.table)
-tennis <- read_csv(
-  "https://raw.githubusercontent.com/azhou5849/tennis-atp-sackmann-data/master/atp_matches_2019.csv"
-)
-setDT(tennis)
+source_url <- "https://raw.githubusercontent.com/azhou5849/tennis-atp-sackmann-data/master/atp_matches_2019.csv"
+ten <- fread(source_url)
+stopifnot(is.data.table(ten))
 ```
 
 ## a. How many tournaments took place in 2019?
 
 ```{r}
-tennis[, .(1), tourney_name][, .(.N)]
-
-tennis[, tourney_name2 := fifelse(grepl("^Davis", tourney_name), "Davis", tourney_name)] |>
-  _[, .(1), tourney_name2] |>
-  _[, .(.N)]
+events <- unique(ten[, .(tourney_name, tourney_level)])
+events[, event_label := fifelse(tourney_level == "D",
+                              "Davis Cup", tourney_name)]
+count_a <- events[, .(tournaments = uniqueN(event_label))]
+print(count_a)
 ```
+
 So there are only 69 unique tournaments.
 
 ## b. Did any player win more than one tournament? If so, how many players won more than one tournament, and how many tournaments did the most winning player(s) win?
 
 ```{r}
-tennis[order(tourney_name, -match_num), .(winner_name, match_num, tourney_name)] |>
-  _[, .SD[1], by = tourney_name] |>
-  _[, .(winner_name, .N), winner_name] |>
-  _[order(-N),] |>
-  _[1:3]
-```
-Rafael Nadal won the most games, with 9.
+finals <- unique(
+  ten[round == "F" & tourney_level != "D",
+      .(tourney_id, winner_id, winner_name)],
+  by = "tourney_id"
+)
 
-```{r}
-tennis[round == "F", .(N = .N), winner_name] |>
-  _[order(-N),] |>
-  _[1:3]
+title_counts <- finals[, .(titles = .N),
+                       by = .(winner_id, winner_name)][
+                         order(-titles, winner_name)
+                       ]
+
+repeat_champions <- title_counts[titles > 1L]
+summary_b <- repeat_champions[, .(players = .N,
+                                  highest_title_count = max(titles))]
+leaders_b <- title_counts[titles == max(titles)]
+
+print(summary_b)
+print(leaders_b)
 ```
 
 ## c. Is there any evidence that winners have more aces than losers?
 
 ```{r}
-stats <- tennis[, .(winmore = w_ace > l_ace)] |>
-  _[!is.na(winmore),.(x = sum(winmore), n = .N), ,]
-prop.test(stats$x, stats$n, .5)
+ace_pairs <- ten[!is.na(w_ace) & !is.na(l_ace),
+                 .(winner_ace = w_ace, loser_ace = l_ace)]
+
+ace_summary <- ace_pairs[, .(
+  matches = .N,
+  average_winner = mean(winner_ace),
+  average_loser = mean(loser_ace),
+  average_difference = mean(winner_ace - loser_ace),
+  median_difference = median(winner_ace - loser_ace),
+  share_winner_more = mean(winner_ace > loser_ace),
+  share_tied = mean(winner_ace == loser_ace)
+)]
+print(ace_summary)
 ```
+
 winners perform more aces than losers.
 
 ## d. Identify the player(s) with the highest win-rate. Restrict to players with at least 5 matches.
 
 ```{r}
-tennis[, .(player = c(winner_name, loser_name), winloss = c(rep(1, .N), rep(0, .N)))] |>
-  _[, .(winrate = mean(winloss), games = .N), player] |>
-  _[games >= 5, .(player, winrate)] |>
-  _[order(-winrate)] |>
-  _[1:3]
+appearances <- rbindlist(list(
+  ten[, .(player_id = winner_id,
+          player_name = winner_name,
+          won = 1L)],
+  ten[, .(player_id = loser_id,
+          player_name = loser_name,
+          won = 0L)]
+))
+
+player_records <- appearances[!is.na(player_id), .(
+  player_name = player_name[1L],
+  matches = .N,
+  victories = sum(won),
+  win_rate = mean(won)
+), by = player_id]
+
+eligible_players <- player_records[matches >= 5L][
+  order(-win_rate, -matches, player_name)
+]
+
+leaders_d <- eligible_players[win_rate == max(win_rate)]
+print(eligible_players[seq_len(min(10L, nrow(eligible_players)))])
+print(leaders_d)
 ```
+
 So Rafael Nadal has the highest win-rate.
 
 # Problem 3: poltly
 
 ```{r}
+library(dplyr)
 library(plotly)
-covid <- read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/refs/heads/master/rolling-averages/us-states.csv")
-covid$date <- lubridate::ymd(covid$date)
-names(covid)[names(covid) == "date"] <- "Date"
-names(covid)[names(covid) == "state"] <- "State"
+
+source_p3<- paste0(
+  "https://raw.githubusercontent.com/nytimes/covid-19-data/",
+  "refs/heads/master/rolling-averages/us-states.csv"
+)
+covid_raw <- read.csv(source_p3, stringsAsFactors = FALSE)
+covid_raw$date <- as.Date(covid_raw$date)
+state_data <- covid_raw %>%
+  filter(state %in% state.name) %>%
+  arrange(state, date)
+
+stopifnot(nrow(state_data) > 0L)
 ```
 
 ## a. How many major and minor spikes in cases were there?
 
 ```{r}
-plot_ly(covid, x = ~ Date, y = ~ cases_avg, type = "scatter",
-        mode = "lines") %>%
- layout(yaxis = list(title = "Daily Cases"))
+national <- state_data %>%
+  group_by(date) %>%
+  summarise(average_daily_cases = sum(cases_avg, na.rm = TRUE),
+            .groups = "drop") %>%
+  arrange(date) %>%
+  mutate(trend = as.numeric(stats::filter(
+    average_daily_cases, rep(1 / 21, 21), sides = 2
+  )))
+
+series <- national$trend
+maximum <- max(series, na.rm = TRUE)
+
+# Candidate maxima must dominate a 30-day window on either side.
+local_maximum <- vapply(seq_along(series), function(i) {
+  if (!is.finite(series[i])) return(FALSE)
+  j <- seq.int(max(1L, i - 30L), min(length(series), i + 30L))
+  series[i] == max(series[j], na.rm = TRUE)
+}, logical(1))
+
+candidates <- which(local_maximum & series >= 0.04 * maximum)
+by_height <- candidates[order(series[candidates], decreasing = TRUE)]
+
+# Suppress peaks too close to a previously selected, taller peak.
+selected <- integer(0)
+for (i in by_height) {
+  if (length(selected) == 0L || all(abs(selected - i) >= 65L)) {
+    selected <- c(selected, i)
+  }
+}
+
+peaks <- national[sort(selected), ] %>%
+  mutate(category = if_else(trend >= 0.15 * maximum, "Major", "Minor"))
+
+peak_counts <- peaks %>% count(category, name = "number_of_peaks")
+print(peaks %>% transmute(date, category,
+                          cases_per_day = round(trend)))
+print(peak_counts)
+
+p_a <- plot_ly() %>%
+  add_lines(
+    data = national, x = ~date, y = ~trend,
+    name = "21-day trend", line = list(color = "#34495E", width = 2),
+    hovertemplate = "%{x|%b %d, %Y}<br>%{y:,.0f} cases/day<extra></extra>"
+  ) %>%
+  add_markers(
+    data = filter(peaks, category == "Major"), x = ~date, y = ~trend,
+    name = "Major peak", marker = list(color = "#C94B4B", size = 10),
+    hovertemplate = "Major peak: %{x|%b %Y}<br>%{y:,.0f} cases/day<extra></extra>"
+  ) %>%
+  add_markers(
+    data = filter(peaks, category == "Minor"), x = ~date, y = ~trend,
+    name = "Minor peak", marker = list(color = "#E6A23C", size = 9),
+    hovertemplate = "Minor peak: %{x|%b %Y}<br>%{y:,.0f} cases/day<extra></extra>"
+  ) %>%
+  layout(
+    title = list(text = "COVID-19 case waves across the 50 U.S. states"),
+    xaxis = list(title = "", tickformat = "%b %Y", showgrid = FALSE),
+    yaxis = list(title = "Smoothed new cases per day", separatethousands = TRUE,
+                 gridcolor = "#E6EAF0", zeroline = FALSE),
+    legend = list(orientation = "h", x = 0, y = -0.18),
+    paper_bgcolor = "white", plot_bgcolor = "white",
+    font = list(family = "Arial", color = "#233142")
+  )
+p_a
 ```
-It can been seen that there are 4 major spikes and 3-4 minor spikes.
+
+Under this peak-detection convention, I identify 4 major peaks\*\* and 4 minor peaks
 
 ## b. For the states with the highest and lowest overall rates per population, what differences do you see in their trajectories over time?
 
 ```{r}
-library(dplyr)
+ranked_states <- state_data %>%
+  group_by(state) %>%
+  summarise(approx_cases_per_100k = sum(cases_avg_per_100k, na.rm = TRUE),
+            .groups = "drop") %>%
+  arrange(desc(approx_cases_per_100k))
+
+highest <- ranked_states$state[1]
+lowest <- ranked_states$state[nrow(ranked_states)]
+
+print(ranked_states %>% filter(state %in% c(highest, lowest)))
+
+comparison <- state_data %>%
+  filter(state %in% c(highest, lowest)) %>%
+  mutate(state = factor(state, levels = c(highest, lowest)))
+
+comparison_peaks <- comparison %>%
+  group_by(state) %>%
+  slice_max(order_by = cases_avg_per_100k, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(state, peak_date = date, peak_rate = cases_avg_per_100k)
+print(comparison_peaks)
+
+p_b <- plot_ly(
+  comparison,
+  x = ~date, y = ~cases_avg_per_100k, color = ~state,
+  colors = c("#087E8B", "#C44536"),
+  type = "scatter", mode = "lines", line = list(width = 2.5),
+  hovertemplate = "%{fullData.name}<br>%{x|%b %d, %Y}<br>%{y:.1f} cases/100k<extra></extra>"
+) %>%
+  layout(
+    title = list(text = "Reported COVID-19 incidence: highest vs. lowest overall"),
+    xaxis = list(title = "", tickformat = "%b %Y", showgrid = FALSE),
+    yaxis = list(title = "Seven-day average new cases per 100,000",
+                 gridcolor = "#E6EAF0", zeroline = FALSE),
+    legend = list(orientation = "h", x = 0, y = -0.18),
+    paper_bgcolor = "white", plot_bgcolor = "white",
+    font = list(family = "Arial", color = "#233142")
+  )
+p_b
 ```
 
-```{r}
-state_case_rate <- covid %>%
-  group_by(State) %>%
-  summarise(cumulative_rate = sum(cases_avg_per_100k), .groups = "drop") %>%
-  arrange(desc(cumulative_rate))
-
-state_highest_rate <- state_case_rate$State[1]
-state_lowest_rate  <- state_case_rate$State[nrow(state_case_rate)]
-
-covid_merged <- covid %>%
-  inner_join(state_case_rate, by = "State") %>%
-  mutate(State = factor(State, levels = state_case_rate$State))
-
-all_states <- levels(covid_merged$State)
-
-state_colors <- rep("lightgrey", length(all_states))
-
-state_colors[all_states == state_lowest_rate] <- "red"
-state_colors[all_states == state_highest_rate] <- "blue"
-
-rate_plot <- plot_ly(covid_merged, 
-                     x = ~ Date, 
-                     y = ~ cases_avg_per_100k,
-                     color = ~ State,
-                     colors = state_colors,
-                     type = "scatter",
-                     mode = "lines") %>%
-  layout(yaxis = list(title = "7-day Average COVID Cases per 100k Residents"))
-
-all_state_labels <- levels(covid_merged$State)
-traces_to_hide <- which(!(all_state_labels %in% c(state_highest_rate, state_lowest_rate)))
-
-rate_plot <- style(rate_plot, visible = "legendonly", traces = traces_to_hide)
-rate_plot
-
-```
+Rhode Island has the highest approximate cumulative reported rate , while Maine has the lowest.
 
 ## c. Identify, to the best of your ability without a formal test, the first five states to experience Covid in a substantial way.
 
-```{r}
-library(lubridate)
-```
-
-```{r}
-selected_states <- c(
-  "New York", "New Jersey", "Louisiana",
-  "Guam", "Massachusetts", "Rhode Island"
-)
-
-highlight_data <- covid %>%
-  filter(State %in% selected_states) %>%
-  mutate(State = factor(State, levels = selected_states))
-
-other_data <- covid %>%
-  filter(!State %in% selected_states)
-
-# Colors for the selected states
-state_palette <- c(
-  "red", "blue", "green",
-  "purple", "orange", "yellow"
-)
-
-rate_plot <- plot_ly() %>%
-
-  add_lines(
-    data = other_data,
-    x = ~Date,
-    y = ~cases_avg_per_100k,
-    split = ~State,
-    line = list(color = "lightgrey", width = 0.7),
-    showlegend = FALSE,
-    hoverinfo = "skip"
+```{r part-c}
+first_wave <- state_data %>%
+  filter(date <= as.Date("2020-06-30")) %>%
+  group_by(state) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(
+    above_threshold = !is.na(cases_avg_per_100k) &
+      cases_avg_per_100k >= 10,
+    sustained = above_threshold &
+      lead(above_threshold, 1, default = FALSE) &
+      lead(above_threshold, 2, default = FALSE) &
+      as.integer(lead(date, 1) - date) == 1L &
+      as.integer(lead(date, 2) - date) == 2L
   ) %>%
+  filter(sustained) %>%
+  summarise(first_substantial_date = min(date), .groups = "drop") %>%
+  arrange(first_substantial_date, state) %>%
+  slice_head(n = 5)
 
+print(first_wave)
+stopifnot(nrow(first_wave) == 5L)
+
+state_order <- first_wave$state
+start_date <- min(as.Date("2020-03-01"),
+                  min(first_wave$first_substantial_date) - 10)
+end_date <- max(as.Date("2020-05-15"),
+                max(first_wave$first_substantial_date) + 21)
+
+early_curves <- state_data %>%
+  filter(state %in% state_order, date >= start_date, date <= end_date) %>%
+  mutate(state = factor(state, levels = state_order))
+
+crossings <- first_wave %>%
+  left_join(
+    select(state_data, state, date, cases_avg_per_100k),
+    by = c("state" = "state", "first_substantial_date" = "date")
+  ) %>%
+  mutate(state = factor(state, levels = state_order))
+
+palette <- c("#226D99", "#A23E48", "#F18F01", "#557C55", "#8055A2")
+
+p_c <- plot_ly() %>%
   add_lines(
-    data = highlight_data,
-    x = ~Date,
-    y = ~cases_avg_per_100k,
-    color = ~State,
-    colors = state_palette,
+    data = early_curves,
+    x = ~date, y = ~cases_avg_per_100k,
+    color = ~state, colors = palette,
     line = list(width = 2.5),
-    text = ~paste0(
-      State,
-      "<br>Date: ", Date,
-      "<br>Cases per 100k: ",
-      round(cases_avg_per_100k, 1)
-    ),
-    hoverinfo = "text"
+    hovertemplate = "%{fullData.name}<br>%{x|%b %d, %Y}<br>%{y:.1f} cases/100k<extra></extra>"
   ) %>%
-
+  add_markers(
+    data = crossings,
+    x = ~first_substantial_date, y = ~cases_avg_per_100k,
+    color = ~state, colors = palette,
+    showlegend = FALSE,
+    marker = list(size = 10, line = list(color = "white", width = 1)),
+    hovertemplate = "Threshold reached: %{x|%b %d, %Y}<br>%{y:.1f} cases/100k<extra></extra>"
+  ) %>%
   layout(
-    title = "Early COVID-19 Trends in Selected States",
-    xaxis = list(
-      title = "Date",
-      range = c("2020-03-01", "2020-05-31")
-    ),
-    yaxis = list(
-      title = "Daily Cases per 100,000",
-      range = c(0, 55)
-    )
+    title = list(text = "Five earliest substantial state-level COVID-19 outbreaks"),
+    xaxis = list(title = "", range = c(as.character(start_date), as.character(end_date)),
+                 tickformat = "%b %d", showgrid = FALSE),
+    yaxis = list(title = "Seven-day average new cases per 100,000",
+                 gridcolor = "#E6EAF0", zeroline = FALSE),
+    shapes = list(list(
+      type = "line", xref = "paper", x0 = 0, x1 = 1,
+      yref = "y", y0 = 10, y1 = 10,
+      line = list(color = "#737D8C", width = 1.5, dash = "dot")
+    )),
+    legend = list(orientation = "h", x = 0, y = -0.18),
+    paper_bgcolor = "white", plot_bgcolor = "white",
+    font = list(family = "Arial", color = "#233142")
   )
-
-rate_plot
+p_c
 ```
+
+The first five states are New York, New Jersey, Massachusetts, Connecticut, Louisiana. Their first qualifying dates are New York — 2020-03-22; New Jersey — 2020-03-27; Massachusetts — 2020-03-30; Connecticut — 2020-03-31; Louisiana — 2020-03-31.
