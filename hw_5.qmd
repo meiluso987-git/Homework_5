@@ -246,15 +246,15 @@ makeCI(.9, lb = 7, ub = 2)
 ```
 
 ```{r}
-makeCI(.9, lb = 3, ub = Inf)
+makeCI(.9, lb = 1, ub = Inf)
 ```
 
 ```{r}
-mean(ci1) <- "a"
+mean(ci1) <- "abc"
 ```
 
 ```{r}
-lb(ci1) <- 20
+lb(ci1) <- 100
 sterr(ci1) <- -1
 ```
 
@@ -268,8 +268,7 @@ sterr(ci1) <- Inf
 library(tidyverse)
 library(nzelect)
 library(data.table)
-source_url <- "https://raw.githubusercontent.com/azhou5849/tennis-atp-sackmann-data/master/atp_matches_2019.csv"
-ten <- fread(source_url)
+ten <- fread("https://raw.githubusercontent.com/azhou5849/tennis-atp-sackmann-data/master/atp_matches_2019.csv")
 stopifnot(is.data.table(ten))
 ```
 
@@ -296,8 +295,7 @@ finals <- unique(
 
 title_counts <- finals[, .(titles = .N),
                        by = .(winner_id, winner_name)][
-                         order(-titles, winner_name)
-                       ]
+                         order(-titles, winner_name)]
 
 repeat_champions <- title_counts[titles > 1L]
 summary_b <- repeat_champions[, .(players = .N,
@@ -364,10 +362,7 @@ So Rafael Nadal has the highest win-rate.
 library(dplyr)
 library(plotly)
 
-source_p3<- paste0(
-  "https://raw.githubusercontent.com/nytimes/covid-19-data/",
-  "refs/heads/master/rolling-averages/us-states.csv"
-)
+source_p3<- paste0("https://raw.githubusercontent.com/nytimes/covid-19-data/refs/heads/master/rolling-averages/us-states.csv")
 covid_raw <- read.csv(source_p3, stringsAsFactors = FALSE)
 covid_raw$date <- as.Date(covid_raw$date)
 state_data <- covid_raw %>%
@@ -392,7 +387,6 @@ national <- state_data %>%
 series <- national$trend
 maximum <- max(series, na.rm = TRUE)
 
-# Candidate maxima must dominate a 30-day window on either side.
 local_maximum <- vapply(seq_along(series), function(i) {
   if (!is.finite(series[i])) return(FALSE)
   j <- seq.int(max(1L, i - 30L), min(length(series), i + 30L))
@@ -402,7 +396,6 @@ local_maximum <- vapply(seq_along(series), function(i) {
 candidates <- which(local_maximum & series >= 0.04 * maximum)
 by_height <- candidates[order(series[candidates], decreasing = TRUE)]
 
-# Suppress peaks too close to a previously selected, taller peak.
 selected <- integer(0)
 for (i in by_height) {
   if (length(selected) == 0L || all(abs(selected - i) >= 65L)) {
@@ -446,7 +439,7 @@ p_a <- plot_ly() %>%
 p_a
 ```
 
-Under this peak-detection convention, I identify 4 major peaks\*\* and 4 minor peaks
+Under this peak-detection convention, I identify 4 major peaks and 4 minor peaks
 
 ## b. For the states with the highest and lowest overall rates per population, what differences do you see in their trajectories over time?
 
